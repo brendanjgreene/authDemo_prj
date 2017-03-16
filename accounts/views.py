@@ -7,6 +7,7 @@ from django.template.context_processors import csrf
 from django.conf import settings
 import datetime
 import stripe
+import arrow
 
 stripe.api_key = settings.STRIPE_SECRET
 
@@ -16,14 +17,16 @@ def register(request):
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             try:
-                customer = stripe.Charge.create(
-                    amount=499,
-                    currency="USD",
-                    description=form.cleaned_data['email'],
-                    card=form.cleaned_data['stripe_id'],
+                customer = stripe.Customer.create(
+                    email=form.cleaned_data['email'],
+                    card=form.cleaned_data['stripe_id'],  # this is currently the card token/id
+                    plan='REG_MONTHLY',
                 )
-                if customer.paid:
-                    form.save()
+                if customer:
+                    user = form.save()
+                    user.stripe_id = customer.id
+                    user.subscription_end = arrow.now().replace(weeks=+4).datetime
+                    user.save()
                     user = auth.authenticate(email=request.POST.get('email'),
                                              password=request.POST.get('password1'))
                     if user:
